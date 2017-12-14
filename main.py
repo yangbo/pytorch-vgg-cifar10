@@ -1,3 +1,4 @@
+from tee import StdoutTee, StderrTee
 import argparse
 import os
 import shutil
@@ -51,16 +52,12 @@ parser.add_argument('--half', dest='half', action='store_true',
 parser.add_argument('--save-dir', dest='save_dir',
                     help='The directory used to save the trained models',
                     default='save_temp', type=str)
-
-
+parser.add_argument('--log-prefix', dest='log_prefix', type=str, 
+                    help='The log file name prefix')
 best_prec1 = 0
 
-
 def main():
-    global args, best_prec1
-    args = parser.parse_args()
-
-
+    global best_prec1
     # Check the save_dir exists or not
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
@@ -73,7 +70,7 @@ def main():
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
-            print "=> loading checkpoint '{}'".format(args.resume)
+            print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint = torch.load(args.resume)
             args.start_epoch = checkpoint['epoch']
             best_prec1 = checkpoint['best_prec1']
@@ -81,7 +78,7 @@ def main():
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.evaluate, checkpoint['epoch']))
         else:
-            print "=> no checkpoint found at '{}'".format(args.resume)
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True
 
@@ -291,4 +288,7 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == '__main__':
-    main()
+    global args
+    args = parser.parse_args()
+    with StdoutTee(args.log_prefix + args.arch, buff=1024), StderrTee(args.log_prefix + args.arch+'_error', buff=1024):
+        main()
