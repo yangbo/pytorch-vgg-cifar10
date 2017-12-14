@@ -1,7 +1,6 @@
 from tee import StdoutTee, StderrTee
 import argparse
 import os
-import shutil
 import time
 
 import torch

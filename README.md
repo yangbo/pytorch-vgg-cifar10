@@ -1,11 +1,16 @@
 # pytorch-vgg-cifar10
+
 This is the PyTorch implementation of VGG network trained on CIFAR10 dataset.
-And it can run in windows.
+
+It can run in Windows.
 
 ### Requirements. 
-[PyTorch] (https://github.com/pytorch/pytorch)
-[PyTorch for windows] (https://zhuanlan.zhihu.com/p/26871672) (In Chinese)
-[torchvision] (https://github.com/pytorch/vision)
+
+[PyTorch](https://github.com/pytorch/pytorch)
+
+[PyTorch for Windows](https://zhuanlan.zhihu.com/p/26871672) (In Chinese)
+
+[torchvision](https://github.com/pytorch/vision)
 
 python tee : pip install tee
 
