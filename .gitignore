@@ -3,3 +3,5 @@
 /save_*
 /log_*
 /logs/
+/.project
+/.pydevproject
