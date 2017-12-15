@@ -34,4 +34,42 @@ Then use the ipython notebook plot.ipynb to view the results.
 	
 ![alt text](vgg_plot.png)
 
+### Issues
 
+When run in Windows with run.py, it will throw 'Memeory Error' exception
+after 71 epoch. It is very strange. I still don't know how to fix it.
+
+The stack trace like:
+
+```
+Traceback (most recent call last):
+  File "main.py", line 294, in <module>
+  File "<string>", line 1, in <module>
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\spawn.py", line 105, in spawn_main
+    exitcode = _main(fd)
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\spawn.py", line 115, in _main
+    self = reduction.pickle.load(from_parent)
+MemoryError
+  File "main.py", line 125, in main
+
+  File "main.py", line 153, in train
+
+  File "F:\anaconda3\envs\ptc\lib\site-packages\torch\utils\data\dataloader.py", line 310, in __iter__
+    return DataLoaderIter(self)
+  File "F:\anaconda3\envs\ptc\lib\site-packages\torch\utils\data\dataloader.py", line 167, in __init__
+    w.start()
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\process.py", line 105, in start
+    self._popen = self._Popen(self)
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\context.py", line 223, in _Popen
+    return _default_context.get_context().Process._Popen(process_obj)
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\context.py", line 322, in _Popen
+    return Popen(process_obj)
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\popen_spawn_win32.py", line 65, in __init__
+    reduction.dump(process_obj, to_child)
+  File "F:\anaconda3\envs\ptc\lib\multiprocessing\reduction.py", line 60, in dump
+    ForkingPickler(file, protocol).dump(obj)
+BrokenPipeError: [Errno 32] Broken pipe
+```
+
+The BrokenPipeError is caused by the MemoryError. The children process die so
+the pipe is broken.
