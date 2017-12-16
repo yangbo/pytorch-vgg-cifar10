@@ -12,6 +12,7 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import vgg
+import multiprocessing
 
 model_names = sorted(name for name in vgg.__dict__
     if name.islower() and not name.startswith("__")
@@ -53,6 +54,8 @@ parser.add_argument('--save-dir', dest='save_dir',
                     default='save_temp', type=str)
 parser.add_argument('--log-prefix', dest='log_prefix', type=str, 
                     help='The log file name prefix')
+parser.add_argument('--no-transform', dest='no_transform', action='store_true',
+                    help='Do not use flip and crop transforms on loading train data-sets.')
 best_prec1 = 0
 
 def main():
@@ -84,13 +87,21 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
+    image_transforms = [
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomCrop(32, 4)
+    ]
+    basic_transforms = [
+        transforms.ToTensor(),
+        normalize
+    ]
+    if args.no_transform:
+        transform_list = basic_transforms
+    else:
+        transform_list = image_transforms + basic_transforms
+    print('transform_list', transform_list)
     train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=True, transform=transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomCrop(32, 4),
-            transforms.ToTensor(),
-            normalize,
-        ]), download=True),
+        datasets.CIFAR10(root='./data', train=True, transform=transforms.Compose(transform_list), download=True),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
@@ -287,6 +298,7 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == '__main__':
+    multiprocessing.freeze_support()
     global args
     args = parser.parse_args()
     with StdoutTee(args.log_prefix + args.arch, buff=1024), StderrTee(args.log_prefix + args.arch+'_error', buff=1024):

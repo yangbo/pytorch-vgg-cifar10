@@ -10,7 +10,7 @@ import os
 if not os.path.exists('logs'):
     os.mkdir('logs')
 
-def run_arch(arch, in_half=False):
+def run_arch(arch, in_half=False, option=''):
     """ Run training of the net architecture 'arch'. 
     Args:
         in_half: True to run in half precision mode.
@@ -18,7 +18,8 @@ def run_arch(arch, in_half=False):
     half_opt = ''
     if in_half:
         half_opt = '--half'
-    cmd = "python main.py  --arch={model}  --save-dir=save_{model} {half} --log-prefix=logs/log_".format(model=arch, half=half_opt)
+    cmd = "python src/main.py --arch={model} {half} {option}".format(
+        model=arch, half=half_opt, option=option)
     print('Run {arch} ...'.format(arch=arch))
     subprocess.call(cmd, stderr=subprocess.STDOUT)
 
@@ -36,5 +37,4 @@ def run_all(in_half):
 
 
 if __name__ == '__main__':
-    run_arch('vgg19_bn')
-    run_arch('vgg19_bn', in_half=True)
+    run_arch('vgg19_bn', in_half=False, option='--workers=1 --log-prefix=log_da_ --save-dir=save_da_vgg19_bn')

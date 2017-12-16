@@ -5,6 +5,7 @@ Created on 20171214
 '''
 import sys
 import time
+import os
 sys.path.insert(0, '../src')
 import torch
 import torchvision.transforms as transforms
@@ -39,7 +40,7 @@ class AverageMeter(object):
 def test_loader():
     global args
     args.batch_size = 128
-    args.workers = 4
+    args.workers = 0
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
@@ -52,7 +53,7 @@ def test_loader():
             normalize,
         ]), download=True),
         batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True)
+        num_workers=args.workers, pin_memory=False)
 
     val_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(root=BASE+'/data', train=False, transform=transforms.Compose([
@@ -60,7 +61,7 @@ def test_loader():
             normalize,
         ])),
         batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
+        num_workers=args.workers, pin_memory=False)
     
     meter_train = AverageMeter()
     meter_test = AverageMeter()
@@ -87,6 +88,9 @@ def test_loader():
     print('Total cost: {:.2f} seconds = {:.2f} minutes'.format(cost, cost/60.))
     
 if __name__ == '__main__':
+    log_dir = BASE+'/logs'
+    if not os.path.exists(log_dir):
+        os.mkdir(log_dir)
     with StdoutTee(BASE+'/logs/test', buff=1024), StderrTee(BASE+'/logs/test_error', buff=1024):
         test_loader()
     
