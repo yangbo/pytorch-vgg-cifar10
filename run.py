@@ -37,4 +37,4 @@ def run_all(in_half):
 
 
 if __name__ == '__main__':
-    run_arch('vgg19_bn', in_half=False, option='--workers=0 --log-prefix=log_da_ --save-dir=save_da_vgg19_bn')
+    run_arch('vgg19_bn', in_half=False, option='--batch-size=512 --workers=0 --log-prefix=log_da_ --save-dir=save_da_vgg19_bn')
