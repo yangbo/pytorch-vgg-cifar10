@@ -4,7 +4,6 @@ Modified from https://github.com/pytorch/vision.git
 import math
 
 import torch.nn as nn
-import torch.nn.init as init
 
 __all__ = [
     'VGG', 'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
@@ -28,7 +27,7 @@ class VGG(nn.Module):
             nn.ReLU(True),
             nn.Linear(512, 10),
         )
-         # Initialize weights
+        # Initialize weights
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels

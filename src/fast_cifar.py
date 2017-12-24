@@ -1,21 +1,61 @@
 from __future__ import print_function
+from __future__ import division
 from PIL import Image
-import os
 import os.path
-import errno
 import numpy as np
 import sys
+import multiprocessing
+from math import ceil
+import ctypes
+import torch.utils.data as data
+from torchvision.datasets.utils import download_url, check_integrity
+from multiprocessing import Array, Process
+import logging as log
+import torch
+
 if sys.version_info[0] == 2:
     import cPickle as pickle
 else:
     import pickle
 
-import torch.utils.data as data
-from .utils import download_url, check_integrity
+# configure logging for multiprocessing
+log.basicConfig(level=log.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 
+def _transform_proc(shm_array, shape, range_index, transformer):
+    """ 
+    Args:
+        shape ( tuple ) : the original data shape
+        range_index ( (start, end) tuple ): index of samples, end is exclusive.
+    """
+    np_array = np.ctypeslib.as_array(shm_array.get_obj())
+    np_array = np_array.reshape(shape)
+    pid = multiprocessing.current_process().pid
+    log.debug('[pid=%d] To transform the data[%s]', pid, range_index)
+    for index in range(*range_index):
+        img = np_array[index]
+        img = img.astype(np.uint8)          # can not use ndarray.view() because that will interpret double bytes as uint8 other than cast it!
+        img = Image.fromarray(img, 'RGB')
+        img = transformer(img)
+        if isinstance(img, torch.Tensor):
+            img = img.numpy()
+        else:
+            img = np.asarray(img)
+        row = np_array[index].reshape(-1)
+        row[:] = img.reshape(-1)
 
-class CIFAR10(data.Dataset):
-    """`CIFAR10 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset.
+def numpy_to_ctyps_type(numpy_type):
+    type_map = {
+        'uint8': ctypes.c_uint8,
+        'uint16': ctypes.c_uint16,
+        'uint32': ctypes.c_uint32,
+        'float32': ctypes.c_float,
+        'float64': ctypes.c_double
+    }
+    type_of_ctyps = type_map[numpy_type]
+    return type_of_ctyps
+
+class FastCIFAR10(data.Dataset):
+    """`FastCIFAR10 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset.
 
     Args:
         root (string): Root directory of dataset where directory
@@ -29,6 +69,8 @@ class CIFAR10(data.Dataset):
         download (bool, optional): If true, downloads the dataset from the internet and
             puts it in root directory. If dataset is already downloaded, it is not
             downloaded again.
+        num_workers (int, optional): The number of workers to parallel processing 
+            transform functions. Default is the number of CPU.
 
     """
     base_folder = 'cifar-10-batches-py'
@@ -46,15 +88,17 @@ class CIFAR10(data.Dataset):
     test_list = [
         ['test_batch', '40351d587109b95175f43aff81a1287e'],
     ]
-
+    
     def __init__(self, root, train=True,
                  transform=None, target_transform=None,
-                 download=False):
+                download=False, num_workers=None, final_shape=None):
         self.root = os.path.expanduser(root)
         self.transform = transform
         self.target_transform = target_transform
         self.train = train  # training set or test set
-
+        self.num_workers = num_workers
+        self.final_shape = final_shape  # the data final shape after transform
+        
         if download:
             self.download()
 
@@ -62,7 +106,61 @@ class CIFAR10(data.Dataset):
             raise RuntimeError('Dataset not found or corrupted.' +
                                ' You can use download=True to download it')
 
-        # now load the picked numpy arrays
+        # now load the pickled numpy arrays
+        self._load_data()
+        if self.final_shape == None:
+            self.final_shape = self.train_data.shape
+        # allocate shared memory
+        self._shm_train_raw = Array(ctypes.c_float,         # always float type
+                                    self.train_data.size)
+        # wrap the shared memory array into numpy ndarray
+        self._shm_train_nda = np.ctypeslib.as_array(self._shm_train_raw.get_obj())
+
+    def reset(self):
+        """ Reset the data set, now just do transformation again. """
+        self._transform_dataset()
+        
+    def _transform_parallel(self):
+        if self.num_workers == None:
+            num_workers = multiprocessing.cpu_count()
+        # partition the data
+        shape = self.train_data.shape
+        row_num = shape[0]  # suppose dimension as N.C.W.H
+        rows_per_worker = ceil(row_num / num_workers)
+        workers = []
+        index_list = list(range(0,row_num, rows_per_worker))
+        for n,start in enumerate(index_list):
+            if n == len(index_list)-1:
+                end = row_num
+            else:
+                end = index_list[n+1]
+            args = (self._shm_train_raw, shape, (start, end), self.transform)
+            a = np.ctypeslib.as_array(self._shm_train_raw.get_obj())
+            a = a.reshape(self.train_data.shape)
+            proc = Process(target=_transform_proc, args=args)
+            proc.deamon = True
+            proc.start()
+            workers.append(proc)
+        # wait for all subprocess finish
+        for proc in workers:
+            proc.join()
+        # reshape
+        self._shm_train_nda = self._shm_train_nda.reshape(self.final_shape)
+
+    def _transform_dataset(self):
+        """ Transform the train data parallel in multiple subprocess.
+            But the transformation will not change the row order.
+        """
+        # 1. Copy data-set to shared memory
+        # 2. Do transform in parallel, suspend current execution until all subprocess done.
+        
+        self._shm_train_nda = self._shm_train_nda.reshape(self.train_data.shape)    # we need to use the original data shape instead of final shape
+        # 1.
+        self._shm_train_nda[:] = self.train_data[:]   # Copy the original data into share memory based ndarray
+        # 2.
+        self._transform_parallel()
+    
+    def _load_data(self):
         if self.train:
             self.train_data = []
             self.train_labels = []
@@ -101,6 +199,7 @@ class CIFAR10(data.Dataset):
             self.test_data = self.test_data.reshape((10000, 3, 32, 32))
             self.test_data = self.test_data.transpose((0, 2, 3, 1))  # convert to HWC
 
+
     def __getitem__(self, index):
         """
         Args:
@@ -110,27 +209,19 @@ class CIFAR10(data.Dataset):
             tuple: (image, target) where target is index of the target class.
         """
         if self.train:
-            img, target = self.train_data[index], self.train_labels[index]
+            img, target = self._shm_train_nda[index], self.train_labels[index]
         else:
             img, target = self.test_data[index], self.test_labels[index]
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = Image.fromarray(img)
-
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
+            
         return img, target
-
+    
+    
     def __len__(self):
         if self.train:
             return len(self.train_data)
         else:
             return len(self.test_data)
+
 
     def _check_integrity(self):
         root = self.root
@@ -140,6 +231,7 @@ class CIFAR10(data.Dataset):
             if not check_integrity(fpath, md5):
                 return False
         return True
+
 
     def download(self):
         import tarfile
@@ -160,10 +252,10 @@ class CIFAR10(data.Dataset):
         os.chdir(cwd)
 
 
-class CIFAR100(CIFAR10):
+class CIFAR100(FastCIFAR10):
     """`CIFAR100 <https://www.cs.toronto.edu/~kriz/cifar.html>`_ Dataset.
 
-    This is a subclass of the `CIFAR10` Dataset.
+    This is a subclass of the `FastCIFAR10` Dataset.
     """
     base_folder = 'cifar-100-python'
     url = "https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz"
@@ -176,3 +268,6 @@ class CIFAR100(CIFAR10):
     test_list = [
         ['test', 'f0ef6b0ae62326f3e7ffdfab6717acfc'],
     ]
+
+if __name__ == '__main__':
+    print('fast_cifar in main.')

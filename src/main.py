@@ -3,9 +3,7 @@ import argparse
 import os
 import time
 
-import torch
 import torch.nn as nn
-import torch.nn.parallel
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
@@ -13,6 +11,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import vgg
 import multiprocessing
+from fast_cifar import FastCIFAR10
 
 model_names = sorted(name for name in vgg.__dict__
     if name.islower() and not name.startswith("__")
@@ -101,7 +100,8 @@ def main():
         transform_list = image_transforms + basic_transforms
     print('transform_list', transform_list)
     train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=True, transform=transforms.Compose(transform_list), download=True),
+        FastCIFAR10(root='./data', train=True, transform=transforms.Compose(transform_list), 
+                    download=True, final_shape=(50000,3,32,32)),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
@@ -130,7 +130,7 @@ def main():
 
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch)
-
+        train_loader.dataset.reset()    # do ahead transform
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch)
 
@@ -158,7 +158,6 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     # switch to train mode
     model.train()
-
     end = time.time()
     for i, (input, target) in enumerate(train_loader):
 
